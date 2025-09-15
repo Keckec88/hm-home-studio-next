@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
@@ -19,7 +18,7 @@ const BUSINESS = {
   taxNote: "Gemäß § 19 UStG wird keine Umsatzsteuer berechnet",
 };
 
-/* === PREVODI: vključno s CENIKOM (DE/EN/TR/SR/HR) === */
+/* === PREVODI (DE/EN/TR/SR/HR) === */
 const translations = {
   de: {
     heroTitle: "Schönheit mit Liebe zum Detail",
@@ -38,6 +37,7 @@ const translations = {
     bookingTitle: "Online-Termin",
     bookingSubtitle:
       "Wähle Service, Datum und Uhrzeit. Gern auch per WhatsApp oder Anruf.",
+    bookingName: "Name",
     bookingService: "Service",
     bookingDate: "Datum",
     bookingDuration: "Dauer",
@@ -90,6 +90,7 @@ const translations = {
     contactSubtitle: "Fastest via WhatsApp or call.",
     bookingTitle: "Online booking",
     bookingSubtitle: "Choose service, date and time. Also via WhatsApp or call.",
+    bookingName: "Name",
     bookingService: "Service",
     bookingDate: "Date",
     bookingDuration: "Duration",
@@ -142,6 +143,7 @@ const translations = {
     contactSubtitle: "En hızlısı WhatsApp veya arama.",
     bookingTitle: "Online randevu",
     bookingSubtitle: "Hizmet, tarih ve saat seçin. WhatsApp/arama da olur.",
+    bookingName: "İsim",
     bookingService: "Hizmet",
     bookingDate: "Tarih",
     bookingDuration: "Süre",
@@ -194,6 +196,7 @@ const translations = {
     contactSubtitle: "Najbrže preko WhatsApp-a ili poziva.",
     bookingTitle: "Online rezervacija",
     bookingSubtitle: "Izaberi uslugu, datum i vreme. Može i WhatsApp/poziv.",
+    bookingName: "Ime",
     bookingService: "Usluga",
     bookingDate: "Datum",
     bookingDuration: "Trajanje",
@@ -246,6 +249,7 @@ const translations = {
     contactSubtitle: "Najbrže putem WhatsApp-a ili poziva.",
     bookingTitle: "Online rezervacija",
     bookingSubtitle: "Odaberi uslugu, datum i vrijeme. Može i WhatsApp/poziv.",
+    bookingName: "Ime",
     bookingService: "Usluga",
     bookingDate: "Datum",
     bookingDuration: "Trajanje",
@@ -301,7 +305,6 @@ const formatLocal = (dt) => new Date(dt).toLocaleString(undefined, { dateStyle: 
 // 2-urni razmik; delavniki = fiksni začetki, vikend = 09:00–18:00
 function generateSlots(date, plan, selectedDuration) {
   const d = new Date(date);
-  // fallbacki, če je localStorage imel star plan
   const wkRange = plan.weekendRange || DEFAULT_PLAN.weekendRange;
   const wkStarts = plan.weekdayStarts || DEFAULT_PLAN.weekdayStarts;
   const slotStep = plan.slotMinutes || DEFAULT_PLAN.slotMinutes;
@@ -310,7 +313,6 @@ function generateSlots(date, plan, selectedDuration) {
   const now = new Date();
   const out = [];
 
-  // ===== DELAVNIKI (pon–pet): 10:30, 13:30, 18:30 =====
   if (weekday >= 1 && weekday <= 5) {
     const weekdayEnd = { "10:30": "12:30", "13:30": "15:30", "18:30": "20:30" };
     for (const hhmm of wkStarts) {
@@ -325,7 +327,6 @@ function generateSlots(date, plan, selectedDuration) {
     return out;
   }
 
-  // ===== VIKEND (sob/ned): 09:00–18:00, na vsaki 2 h =====
   const startMin = toMinutes(wkRange.start);
   const endMin   = toMinutes(wkRange.end);
 
@@ -357,6 +358,27 @@ function buildICS(title, details, startISO, minutes){
   ].join("\r\n");
 }
 
+/* === PRIKAZ CENE: poravnava € in številk === */
+function PriceTag({ price }) {
+  const s = String(price).trim();
+  // podpiramo "€40", "40 €", "3 €" ...
+  const m = s.match(/^([€$])?\s*([\d.,]+)\s*([€$])?$/);
+  const leading = !!m?.[1];
+  const curr = m?.[1] || m?.[3] || "€";
+  const num = m?.[2] || s;
+
+  return (
+    <span
+      className="inline-flex items-baseline gap-1 whitespace-nowrap"
+      style={{ fontFeatureSettings: '"tnum" 1' }} // tabular numbers
+    >
+      {leading && <span>{curr}</span>}
+      <span className="tabular-nums">{num}</span>
+      {!leading && <span>{curr}</span>}
+    </span>
+  );
+}
+
 /* === KOMPONENTA === */
 export default function Page(){
   const [lang, setLang] = useState("de");
@@ -364,7 +386,7 @@ export default function Page(){
 
   const whatsappBase = `https://wa.me/${BUSINESS.phoneTel}`;
 
-  // plan z migracijo (če je v localStorage stara struktura)
+  // plan z migracijo
   const [plan, setPlan] = useState(() => {
     try {
       const raw = localStorage.getItem("hm_plan");
@@ -400,13 +422,44 @@ export default function Page(){
     [date, plan, duration]
   );
 
+  /* === ADMIN PIN (brez prompta), PIN = 4391 === */
+  const ADMIN_PIN = "4391";
   const [admin, setAdmin] = useState(false);
-  const onAdminClick = () => { if (admin) return setAdmin(false); const pin = prompt("Admin PIN (default 2468)"); if (pin==="2468") setAdmin(true); };
-  const toggleBlock = (slot) => setPlan(p => ({...p, blockedISO: p.blockedISO.includes(slot.iso) ? p.blockedISO.filter(x=>x!==slot.iso) : [...p.blockedISO, slot.iso]}));
+  const [showPin, setShowPin] = useState(false);
+  const [pin, setPin] = useState("");
+
+  useEffect(() => {
+    if (localStorage.getItem("hm_admin") === "1") setAdmin(true);
+  }, []);
+  useEffect(() => {
+    if (admin) localStorage.setItem("hm_admin", "1");
+    else localStorage.removeItem("hm_admin");
+  }, [admin]);
+
+  const onAdminClick = () => {
+    if (admin) { setAdmin(false); return; } // logout
+    setShowPin((s) => !s);                  // pokaži/Skrij vnos PIN
+  };
+  const submitPin = () => {
+    if (pin === ADMIN_PIN) {
+      setAdmin(true);
+      setShowPin(false);
+      setPin("");
+    } else {
+      setPin("");
+    }
+  };
+
+  const toggleBlock = (slot) => setPlan(p => ({
+    ...p,
+    blockedISO: p.blockedISO.includes(slot.iso)
+      ? p.blockedISO.filter(x=>x!==slot.iso)
+      : [...p.blockedISO, slot.iso]
+  }));
 
   const sendToWhatsApp = (slot) => {
     const text = encodeURIComponent(
-      `Pozdrav HM home studio!\nIme: ${name || "-"}\nJezik/Language: ${lang.toUpperCase()}\n${t.bookingService}: ${service}\n${t.bookingDate}: ${date} ${slot.hhmm}\n${t.bookingDuration}: ${duration} ${t.minutes}`
+      `Pozdrav HM home studio!\n${t.bookingName}: ${name || "-"}\nJezik/Language: ${lang.toUpperCase()}\n${t.bookingService}: ${service}\n${t.bookingDate}: ${date} ${slot.hhmm}\n${t.bookingDuration}: ${duration} ${t.minutes}`
     );
     window.open(`${whatsappBase}?text=${text}`, "_blank");
   };
@@ -441,6 +494,7 @@ export default function Page(){
             <img src="/logo.png" alt="HM home studio" className="h-10 w-10 rounded-full object-contain ring-1 ring-black/5 bg-white shadow" />
             <span className="font-semibold">HM <span className="text-rose-600">home</span> studio</span>
           </a>
+
           <nav className="hidden md:flex items-center gap-7 text-sm">
             <a href="#services">{t.servicesTitle}</a>
             <a href="#prices">{t.pricelistTitle}</a>
@@ -449,9 +503,19 @@ export default function Page(){
             <a href="#studio">{t.studioTitle}</a>
             <a href="#contact">Kontakt</a>
           </nav>
+
           <div className="flex gap-2 items-center">
-            <select onChange={(e)=>setLang(e.target.value)} value={lang} className="rounded-lg border px-2 py-1">
-              <option value="de">DE</option><option value="en">EN</option><option value="tr">TR</option><option value="sr">SR</option><option value="hr">HR</option>
+            <select
+              onChange={(e)=>setLang(e.target.value)}
+              value={lang}
+              className="rounded-lg border px-2 py-1"
+              aria-label="Language"
+            >
+              <option value="de">🇩🇪 DE</option>
+              <option value="en">🇬🇧 EN</option>
+              <option value="tr">🇹🇷 TR</option>
+              <option value="sr">🇷🇸 SR</option>
+              <option value="hr">🇭🇷 HR</option>
             </select>
             <a href={`https://wa.me/${BUSINESS.phoneTel}`} target="_blank" className="btn btn-rg">
               <MessageCircle className="size-4" /> {t.reserve}
@@ -531,7 +595,10 @@ export default function Page(){
             <h3 className="text-xl font-bold mb-4">{t.nailsTitle}</h3>
             <ul className="space-y-2">
               {(t.prices?.nails ?? []).map(([n,p], i) => (
-                <li key={i} className="flex justify-between border-b pb-1"><span>{n}</span><span>{p}</span></li>
+                <li key={i} className="flex items-baseline justify-between gap-2 border-b pb-1">
+                  <span>{n}</span>
+                  <PriceTag price={p} />
+                </li>
               ))}
             </ul>
           </div>
@@ -539,7 +606,10 @@ export default function Page(){
             <h3 className="text-xl font-bold mb-4">{t.lashesTitle}</h3>
             <ul className="space-y-2">
               {(t.prices?.lashes ?? []).map(([n,p], i) => (
-                <li key={i} className="flex justify-between border-b pb-1"><span>{n}</span><span>{p}</span></li>
+                <li key={i} className="flex items-baseline justify-between gap-2 border-b pb-1">
+                  <span>{n}</span>
+                  <PriceTag price={p} />
+                </li>
               ))}
             </ul>
           </div>
@@ -556,14 +626,22 @@ export default function Page(){
           <div className="grid md:grid-cols-3 gap-6">
             {/* FORM */}
             <div className="bg-white p-6 rounded-xl shadow md:col-span-1">
-              <label className="text-sm text-slate-600">Ime / Name</label>
-              <input value={name} onChange={(e)=>setName(e.target.value)} placeholder="Vaše ime" className="w-full mt-1 mb-3 border rounded-xl px-3 py-2" />
+              <label className="text-sm text-slate-600">{t.bookingName}</label>
+              <input
+                value={name}
+                onChange={(e)=>setName(e.target.value)}
+                placeholder={t.bookingName}
+                className="w-full mt-1 mb-3 border rounded-xl px-3 py-2"
+              />
+
               <label className="text-sm text-slate-600">{t.bookingService}</label>
               <select value={service} onChange={(e)=>setService(e.target.value)} className="w-full mt-1 mb-3 border rounded-xl px-3 py-2">
                 {allServices.map((n)=>(<option key={n} value={n}>{n}</option>))}
               </select>
+
               <label className="text-sm text-slate-600">{t.bookingDate}</label>
               <input type="date" value={date} onChange={(e)=>setDate(e.target.value)} className="w-full mt-1 mb-3 border rounded-xl px-3 py-2" />
+
               <label className="text-sm text-slate-600">{t.bookingDuration}</label>
               <select value={duration} onChange={(e)=>setDuration(parseInt(e.target.value))} className="w-full mt-1 mb-3 border rounded-xl px-3 py-2">
                 {[90,120].map((m)=>(<option key={m} value={m}>{m} {t.minutes}</option>))}
@@ -574,11 +652,40 @@ export default function Page(){
                 <button onClick={onAdminClick} className="btn btn-outline">
                   {admin ? <Unlock className="size-4" /> : <Lock className="size-4" />} {t.bookingAdmin}
                 </button>
+
+                {/* PIN vnos – pojavi se samo na željo (brez prompta) */}
+                {!admin && showPin && (
+                  <div className="flex items-center gap-2">
+                    <input
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      maxLength={4}
+                      value={pin}
+                      onChange={(e)=>setPin(e.target.value.replace(/\D/g,""))}
+                      onKeyDown={(e)=>{ if(e.key==="Enter") submitPin(); }}
+                      placeholder="PIN"
+                      className="border rounded-lg px-2 py-1 w-20 text-center tracking-widest"
+                    />
+                    <button onClick={submitPin} className="btn btn-outline">OK</button>
+                  </div>
+                )}
+
                 {admin && (
                   <>
-                    <button onClick={()=>{ const blob=new Blob([JSON.stringify(plan,null,2)],{type:"application/json"}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download="hm-plan.json"; a.click(); URL.revokeObjectURL(url); }} className="btn btn-outline"><Download className="size-4" /> {t.exportPlan}</button>
-                    <label className="btn btn-outline cursor-pointer"><Upload className="size-4" /> {t.importPlan}
-                      <input type="file" accept="application/json" className="hidden" onChange={(e)=>{ const file=e.target.files?.[0]; if(!file) return; const reader=new FileReader(); reader.onload=()=>{ try{ const obj=JSON.parse(reader.result); setPlan(obj);}catch{ alert("Invalid JSON"); } }; reader.readAsText(file); }} />
+                    <button
+                      onClick={()=>{ const blob=new Blob([JSON.stringify(plan,null,2)],{type:"application/json"}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download="hm-plan.json"; a.click(); URL.revokeObjectURL(url); }}
+                      className="btn btn-outline"
+                    >
+                      <Download className="size-4" /> {t.exportPlan}
+                    </button>
+                    <label className="btn btn-outline cursor-pointer">
+                      <Upload className="size-4" /> {t.importPlan}
+                      <input
+                        type="file"
+                        accept="application/json"
+                        className="hidden"
+                        onChange={(e)=>{ const file=e.target.files?.[0]; if(!file) return; const reader=new FileReader(); reader.onload=()=>{ try{ const obj=JSON.parse(reader.result); setPlan(obj);}catch{ alert("Invalid JSON"); } }; reader.readAsText(file); }}
+                      />
                     </label>
                   </>
                 )}
@@ -676,3 +783,4 @@ export default function Page(){
     </div>
   );
 }
+
