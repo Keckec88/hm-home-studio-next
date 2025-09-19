@@ -1,7 +1,18 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { MessageCircle, X, Send, Phone, MapPin, Clock, CalendarDays, Euro, Instagram, MessageSquare } from "lucide-react";
+import {
+  MessageCircle,
+  X,
+  Send,
+  Phone,
+  MapPin,
+  Clock,
+  CalendarDays,
+  Euro,
+  Instagram,
+  MessageSquare,
+} from "lucide-react";
 
 type Locale = "de" | "sl" | "en";
 
@@ -141,33 +152,27 @@ export default function Assistant({
   };
 
   const findAnswer = (q: string) => {
-    // booking intent
-    if (includesAny(q, ["termin", "rezerv", "book", "appointment"])) {
+    if (includesAny(q, ["termin", "rezerv", "book", "appointment"]))
       return FAQ.find((f) => f.id === "booking")!.answer[l];
-    }
-    if (includesAny(q, ["preis", "price", "cenik", "euro", "€"])) {
+    if (includesAny(q, ["preis", "price", "cenik", "euro", "€"]))
       return FAQ.find((f) => f.id === "price")!.answer[l];
-    }
-    if (includesAny(q, ["address", "addresse", "naslov", "location", "where", "lokacija"])) {
+    if (includesAny(q, ["address", "addresse", "naslov", "location", "where", "lokacija"]))
       return FAQ.find((f) => f.id === "address")!.answer[l];
-    }
-    if (includesAny(q, ["hours", "odpiral", "öffnungs", "open", "pon", "mo", "sa", "sob"])) {
+    if (includesAny(q, ["hours", "odpiral", "öffnungs", "open", "pon", "mo", "sa", "sob"]))
       return FAQ.find((f) => f.id === "hours")!.answer[l];
-    }
-    if (includesAny(q, ["insta", "instagram", "galerija", "bilder", "fotos"])) {
+    if (includesAny(q, ["insta", "instagram", "galerija", "bilder", "fotos"]))
       return FAQ.find((f) => f.id === "instagram")!.answer[l];
-    }
 
-    // fallback: preprosto ujemanje po ključnih besedah v FAQ
     for (const f of FAQ) {
       if (f.keywords.some((k) => q.includes(k))) return f.answer[l];
     }
     return null;
   };
 
-  const onQuick = (what: "booking" | "prices" | "address" | "hours" | "whatsapp" | "call" | "instagram") => {
+  const onQuick = (
+    what: "booking" | "prices" | "address" | "hours" | "whatsapp" | "call" | "instagram",
+  ) => {
     if (what === "booking") {
-      // premakni na #termin in zapri
       try {
         const el = document.querySelector("#termin");
         if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -176,50 +181,36 @@ export default function Assistant({
       setOpen(false);
       return;
     }
-
     if (what === "prices") {
-      // poskusi skrolati do sekcije cenika; če nimaš sidra, pusti le bot sporočilo
       const sent = tryScrollToSelector('[data-section="prices"], #cenik, #preise');
       setMessages((m) => [
         ...m,
-        {
-          role: "bot",
-          text: sent
-            ? (FAQ.find((f) => f.id === "price")!.answer[l])
-            : (FAQ.find((f) => f.id === "price")!.answer[l]),
-        },
+        { role: "bot", text: FAQ.find((f) => f.id === "price")!.answer[l] },
       ]);
       return;
     }
-
     if (what === "address") {
       setMessages((m) => [...m, { role: "bot", text: FAQ.find((f) => f.id === "address")!.answer[l] }]);
       if (mapsQuery) {
-        const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapsQuery)}`;
+        const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+          mapsQuery,
+        )}`;
         window.open(url, "_blank", "noopener,noreferrer");
       }
       return;
     }
-
     if (what === "hours") {
       setMessages((m) => [...m, { role: "bot", text: FAQ.find((f) => f.id === "hours")!.answer[l] }]);
       return;
     }
-
     if (what === "whatsapp") {
-      if (whatsappNumber) {
-        window.open(`https://wa.me/${whatsappNumber}`, "_blank", "noopener,noreferrer");
-      }
+      if (whatsappNumber) window.open(`https://wa.me/${whatsappNumber}`, "_blank");
       return;
     }
-
     if (what === "call") {
-      if (phone) {
-        window.location.href = `tel:${phone.replace(/\s+/g, "")}`;
-      }
+      if (phone) window.location.href = `tel:${phone.replace(/\s+/g, "")}`;
       return;
     }
-
     if (what === "instagram") {
       window.open("https://instagram.com/", "_blank", "noopener,noreferrer");
       return;
@@ -228,20 +219,20 @@ export default function Assistant({
 
   return (
     <>
-      {/* Floating Toggle Button */}
+      {/* leteči gumb */}
       <button
         aria-label="assistant"
         onClick={() => setOpen((o) => !o)}
-        className="fixed bottom-4 right-4 z-[1000] rounded-full bg-rose-500 text-white shadow-lg hover:bg-rose-600 focus:outline-none focus:ring-2 focus:ring-rose-300 h-14 w-14 flex items-center justify-center"
+        className="fixed bottom-4 right-4 z-[1000] flex h-14 w-14 items-center justify-center rounded-full bg-rose-500 text-white shadow-lg hover:bg-rose-600 focus:outline-none focus:ring-2 focus:ring-rose-300"
       >
         {open ? <X className="h-6 w-6" /> : <MessageCircle className="h-6 w-6" />}
       </button>
 
-      {/* Widget Panel */}
+      {/* panel */}
       {open && (
-        <div className="fixed bottom-20 right-4 z-[1000] w-[92vw] max-w-[360px] rounded-2xl border border-rose-200 bg-white shadow-xl overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3 bg-rose-50 border-b">
-            <div className="font-semibold text-rose-700">{t.title[l]}</div>
+        <div className="fixed bottom-20 right-4 z-[1000] w-[92vw] max-w-[360px] overflow-hidden rounded-2xl border border-rose-200 bg-white shadow-xl">
+          <div className="flex items-center justify-between border-b bg-rose-50 px-4 py-3">
+            <div className="font-semibold text-rose-700">{UI.title[l]}</div>
             <button
               className="rounded-full p-1 text-rose-600 hover:bg-rose-100"
               onClick={() => setOpen(false)}
@@ -251,14 +242,13 @@ export default function Assistant({
             </button>
           </div>
 
-          {/* Messages */}
-          <div className="max-h-[50vh] overflow-auto px-3 py-3 space-y-2">
+          <div className="max-h-[50vh] space-y-2 overflow-auto px-3 py-3">
             {messages.map((m, i) => (
               <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
                 <div
-                  className={`rounded-2xl px-3 py-2 text-sm ${
+                  className={`max-w-[80%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-sm ${
                     m.role === "user" ? "bg-rose-500 text-white" : "bg-rose-100 text-rose-900"
-                  } max-w-[80%] whitespace-pre-wrap`}
+                  }`}
                 >
                   {m.text}
                 </div>
@@ -266,20 +256,48 @@ export default function Assistant({
             ))}
           </div>
 
-          {/* Quick actions */}
           <div className="grid grid-cols-3 gap-2 px-3 pb-2">
-            <QuickButton onClick={() => onQuick("booking")} icon={<CalendarDays className="h-4 w-4" />} label={t.quick.booking[l]} />
-            <QuickButton onClick={() => onQuick("prices")} icon={<Euro className="h-4 w-4" />} label={t.quick.prices[l]} />
-            <QuickButton onClick={() => onQuick("address")} icon={<MapPin className="h-4 w-4" />} label={t.quick.address[l]} />
-            <QuickButton onClick={() => onQuick("hours")} icon={<Clock className="h-4 w-4" />} label={t.quick.hours[l]} />
-            <QuickButton onClick={() => onQuick("whatsapp")} icon={<MessageSquare className="h-4 w-4" />} label={t.quick.whatsapp[l]} color="whatsapp" />
-            <QuickButton onClick={() => onQuick("call")} icon={<Phone className="h-4 w-4" />} label={t.quick.call[l]} />
-            <QuickButton onClick={() => onQuick("instagram")} icon={<Instagram className="h-4 w-4" />} label={t.quick.instagram[l]} color="instagram" />
+            <QuickButton
+              onClick={() => onQuick("booking")}
+              icon={<CalendarDays className="h-4 w-4" />}
+              label={UI.quick.booking[l]}
+            />
+            <QuickButton
+              onClick={() => onQuick("prices")}
+              icon={<Euro className="h-4 w-4" />}
+              label={UI.quick.prices[l]}
+            />
+            <QuickButton
+              onClick={() => onQuick("address")}
+              icon={<MapPin className="h-4 w-4" />}
+              label={UI.quick.address[l]}
+            />
+            <QuickButton
+              onClick={() => onQuick("hours")}
+              icon={<Clock className="h-4 w-4" />}
+              label={UI.quick.hours[l]}
+            />
+            <QuickButton
+              onClick={() => onQuick("whatsapp")}
+              icon={<MessageSquare className="h-4 w-4" />}
+              label={UI.quick.whatsapp[l]}
+              color="whatsapp"
+            />
+            <QuickButton
+              onClick={() => onQuick("call")}
+              icon={<Phone className="h-4 w-4" />}
+              label={UI.quick.call[l]}
+            />
+            <QuickButton
+              onClick={() => onQuick("instagram")}
+              icon={<Instagram className="h-4 w-4" />}
+              label={UI.quick.instagram[l]}
+              color="instagram"
+            />
           </div>
 
-          {/* Input */}
           <form
-            className="flex items-center gap-2 border-t px-3 py-3 bg-white"
+            className="flex items-center gap-2 border-t bg-white px-3 py-3"
             onSubmit={(e) => {
               e.preventDefault();
               send(input);
@@ -289,12 +307,12 @@ export default function Assistant({
             <input
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder={t.inputPlaceholder[l]}
+              placeholder={UI.inputPlaceholder[l]}
               className="flex-1 rounded-xl border border-rose-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-rose-300"
             />
             <button
               type="submit"
-              className="rounded-xl bg-rose-500 text-white px-3 py-2 text-sm hover:bg-rose-600 focus:outline-none focus:ring-2 focus:ring-rose-300"
+              className="rounded-xl bg-rose-500 px-3 py-2 text-sm text-white hover:bg-rose-600 focus:outline-none focus:ring-2 focus:ring-rose-300"
             >
               <Send className="h-4 w-4" />
             </button>
@@ -342,3 +360,4 @@ function QuickButton({ onClick, icon, label, color = "default" }: QuickProps) {
     </button>
   );
 }
+
