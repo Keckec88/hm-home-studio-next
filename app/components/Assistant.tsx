@@ -1,223 +1,344 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { MessageCircle, X, Send, Phone, MapPin, Clock, CalendarDays, Euro, Instagram, MessageSquare } from "lucide-react";
 
-type Locale = "de" | "sl";
+type Locale = "de" | "sl" | "en";
 
-const STRINGS: Record<Locale, any> = {
-  de: {
-    title: "Wie kann ich helfen?",
-    book: "Termin buchen",
-    prices: "Leistungen & Preise",
-    location: "Standort & Parken",
-    contact: "Kontakt",
-    bookDesc: "Ich helfe dir, zum Buchungsbereich zu springen.",
-    goToBooking: "Zum Buchungsbereich",
-    pricesDesc: "Ich zeige dir, wo du die Preise findest.",
-    goToPrices: "Zum Preisbereich",
-    locationDesc:
-      "Studio: Wallweg 21, 63450 Hanau. Parken in der Nähe, Kaffee/Tee inklusive.",
-    openMaps: "In Google Maps öffnen",
-    contactDesc: "Du erreichst uns per WhatsApp, Telefon oder E-Mail.",
-    whatsapp: "WhatsApp öffnen",
-    call: "Anrufen",
-    copyEmail: "E-Mail-Vorlage kopieren",
-    copied: "Vorlage kopiert!",
-  },
-  sl: {
-    title: "Kako ti lahko pomagam?",
-    book: "Rezervacija termina",
-    prices: "Storitve & cenik",
-    location: "Lokacija & parkirišče",
-    contact: "Kontakt",
-    bookDesc: "Pomagam ti skočiti do razdelka za rezervacijo.",
-    goToBooking: "Na razdelek za rezervacijo",
-    pricesDesc: "Pokažem, kje je cenik.",
-    goToPrices: "Na razdelek cenik",
-    locationDesc:
-      "Studio: Wallweg 21, 63450 Hanau. Parkiranje v bližini, kava/čaj vključena.",
-    openMaps: "Odpri v Google Maps",
-    contactDesc: "Dosegljivi smo preko WhatsApp, telefona ali e-pošte.",
-    whatsapp: "Odpri WhatsApp",
-    call: "Pokliči",
-    copyEmail: "Kopiraj e-poštno predlogo",
-    copied: "Predloga kopirana!",
-  },
-};
-
-const EMAIL_TEMPLATES: Record<Locale, string> = {
-  de: `Hallo!
-
-Ich möchte einen Termin reservieren:
-• Leistung:
-• Datum:
-• Uhrzeit:
-• Name:
-• Telefon:
-
-Danke!`,
-  sl: `Zdravo!
-
-Želim rezervirati termin:
-• Storitev:
-• Datum:
-• Ura:
-• Ime:
-• Telefon:
-
-Hvala!`,
-};
-
-type Props = {
-  /** Jezik za prikaz (če ne podaš, privzeto "de"). */
+type AssistantProps = {
   locale?: Locale;
-  /** WhatsApp link (internacionalna oblika brez +, npr. 4917663298747) */
+  /** WhatsApp številka brez + (npr. 4917663298747) */
   whatsappNumber?: string;
-  /** Telefonska številka (z +) */
+  /** prikazna telefonska številka (npr. +49 176 63298747) */
   phone?: string;
-  /** Google Maps query (naslov) */
+  /** niz za Google Maps query (npr. “Wallweg 21, 63450 Hanau”) */
   mapsQuery?: string;
 };
 
-/**
- * Plavajoči pomočnik/“avatar” v spodnjem desnem kotu.
- * Brez strežnika, brez API ključev.
- */
+type QA = {
+  id: string;
+  keywords: string[]; // vsa v lower-case
+  answer: { de: string; sl: string; en: string };
+};
+
+const FAQ: QA[] = [
+  {
+    id: "booking",
+    keywords: ["termin", "rezerv", "book", "online", "appointment"],
+    answer: {
+      de: "Klici oder nutze die WhatsApp-Nachricht. Oder klicke unten auf „Zum Online-Termin“, ich scrolle dich direkt dorthin. 😊",
+      sl: "Uporabi WhatsApp ali pokliči. Lahko pa klikneš tudi „Na spletni termin“ in te odpeljem do obrazca. 😊",
+      en: "Use WhatsApp or call. Or click “Go to booking” and I’ll scroll you to the form. 😊",
+    },
+  },
+  {
+    id: "price",
+    keywords: ["price", "preise", "cenik", "kosten", "euro", "€"],
+    answer: {
+      de: "Cenik/Preisliste najdeš na strani – spodaj v sekciji storitev. 📄 Wenn möchtest, klicke „Cenik/Preise“ – skrolam tja.",
+      sl: "Cenik je na strani – v razdelku storitev. 📄 Če želiš, klikni „Cenik/Preise“ in te premaknem tja.",
+      en: "The price list is on the page in the services section. 📄 Click “Prices” and I’ll scroll there.",
+    },
+  },
+  {
+    id: "address",
+    keywords: ["address", "naslov", "addresse", "kje", "where", "lokacija", "location"],
+    answer: {
+      de: "Naslov: Wallweg 21, 63450 Hanau. Parken in der Nähe – Kaffee/Tee inklusive. ☕️",
+      sl: "Naslov: Wallweg 21, 63450 Hanau. Parkirišče je blizu – kava/čaj vključena. ☕️",
+      en: "Address: Wallweg 21, 63450 Hanau. Parking nearby – coffee/tea included. ☕️",
+    },
+  },
+  {
+    id: "hours",
+    keywords: ["hours", "working", "zeit", "odpiralni", "öffnungs", "open", "pon", "mo", "sa", "sob"],
+    answer: {
+      de: "Delovni/Öffnungszeiten: po dogovoru (Mo–Sa). 📅 Schreibe uns gerne per WhatsApp.",
+      sl: "Odpiralni čas: po dogovoru (Pon–Sob). 📅 Piši nam na WhatsApp.",
+      en: "Opening hours: by appointment (Mon–Sat). 📅 Message us on WhatsApp.",
+    },
+  },
+  {
+    id: "instagram",
+    keywords: ["insta", "instagram", "gallery", "galerija", "bilder", "fotos"],
+    answer: {
+      de: "Naše delo najdeš na Instagramu. 📸",
+      sl: "Naše delo najdeš na Instagramu. 📸",
+      en: "See our work on Instagram. 📸",
+    },
+  },
+];
+
+const UI = {
+  open: {
+    de: "Fragen? Ich helfe 😊",
+    sl: "Vprašanje? Z veseljem pomagam 😊",
+    en: "Need help? I’m here 😊",
+  },
+  title: {
+    de: "HM Assistent",
+    sl: "HM pomočnik",
+    en: "HM Assistant",
+  },
+  inputPlaceholder: {
+    de: "Schreibe deine Frage…",
+    sl: "Napiši vprašanje…",
+    en: "Type your question…",
+  },
+  quick: {
+    booking: { de: "Zum Online-Termin", sl: "Na spletni termin", en: "Go to booking" },
+    prices: { de: "Preise", sl: "Cenik", en: "Prices" },
+    address: { de: "Adresse", sl: "Naslov", en: "Address" },
+    hours: { de: "Öffnungszeiten", sl: "Odpiralni čas", en: "Hours" },
+    whatsapp: { de: "WhatsApp", sl: "WhatsApp", en: "WhatsApp" },
+    call: { de: "Anrufen", sl: "Pokliči", en: "Call" },
+    instagram: { de: "Instagram", sl: "Instagram", en: "Instagram" },
+  },
+  sys: {
+    hello: {
+      de: "Hallo! Ich bin dein Assistent. Wobei kann ich helfen?",
+      sl: "Živjo! Sem tvoj pomočnik. Kako lahko pomagam?",
+      en: "Hi! I’m your assistant. How can I help?",
+    },
+    noMatch: {
+      de: "Hmmm, bin mir nicht sicher. Möchtest du „Zum Online-Termin“ oder Infos zu Preisen/Adresse?",
+      sl: "Hmm, nisem povsem prepričan. Želiš, da te premaknem na spletni termin ali te zanimajo cene/naslov?",
+      en: "Hmm, not sure. Want me to scroll you to booking, or show prices/address?",
+    },
+  },
+};
+
+type Msg = { role: "user" | "bot"; text: string };
+
 export default function Assistant({
   locale = "de",
-  whatsappNumber = "4917663298747",
-  phone = "+4917663298747",
+  whatsappNumber,
+  phone,
   mapsQuery = "Wallweg 21, 63450 Hanau",
-}: Props) {
-  const T = STRINGS[locale] ?? STRINGS.de;
-  const EMAIL_TEMPLATE = EMAIL_TEMPLATES[locale] ?? EMAIL_TEMPLATES.de;
-
+}: AssistantProps) {
   const [open, setOpen] = useState(false);
-  const [notif, setNotif] = useState<string | null>(null);
-  const panelRef = useRef<HTMLDivElement>(null);
+  const [input, setInput] = useState("");
+  const [messages, setMessages] = useState<Msg[]>([]);
+
+  const t = useMemo(() => UI, []);
+  const l = locale;
 
   useEffect(() => {
-    function onClickOutside(e: MouseEvent) {
-      if (open && panelRef.current && !panelRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
+    if (open && messages.length === 0) {
+      setMessages([{ role: "bot", text: t.sys.hello[l] }]);
     }
-    document.addEventListener("mousedown", onClickOutside);
-    return () => document.removeEventListener("mousedown", onClickOutside);
-  }, [open]);
+  }, [open, messages.length, t, l]);
 
-  const scrollTo = (id: string) => {
-    const el = document.getElementById(id);
-    if (el) {
-      el.scrollIntoView({ behavior: "smooth", block: "start" });
-      setOpen(false);
+  const send = (text: string) => {
+    if (!text.trim()) return;
+    setMessages((m) => [...m, { role: "user", text }]);
+    const answer = findAnswer(text.toLowerCase());
+    if (answer) {
+      setMessages((m) => [...m, { role: "bot", text: answer }]);
+    } else {
+      setMessages((m) => [...m, { role: "bot", text: t.sys.noMatch[l] }]);
     }
   };
 
-  const copyEmail = async () => {
-    await navigator.clipboard.writeText(EMAIL_TEMPLATE);
-    setNotif(T.copied);
-    setTimeout(() => setNotif(null), 1500);
+  const findAnswer = (q: string) => {
+    // booking intent
+    if (includesAny(q, ["termin", "rezerv", "book", "appointment"])) {
+      return FAQ.find((f) => f.id === "booking")!.answer[l];
+    }
+    if (includesAny(q, ["preis", "price", "cenik", "euro", "€"])) {
+      return FAQ.find((f) => f.id === "price")!.answer[l];
+    }
+    if (includesAny(q, ["address", "addresse", "naslov", "location", "where", "lokacija"])) {
+      return FAQ.find((f) => f.id === "address")!.answer[l];
+    }
+    if (includesAny(q, ["hours", "odpiral", "öffnungs", "open", "pon", "mo", "sa", "sob"])) {
+      return FAQ.find((f) => f.id === "hours")!.answer[l];
+    }
+    if (includesAny(q, ["insta", "instagram", "galerija", "bilder", "fotos"])) {
+      return FAQ.find((f) => f.id === "instagram")!.answer[l];
+    }
+
+    // fallback: preprosto ujemanje po ključnih besedah v FAQ
+    for (const f of FAQ) {
+      if (f.keywords.some((k) => q.includes(k))) return f.answer[l];
+    }
+    return null;
+  };
+
+  const onQuick = (what: "booking" | "prices" | "address" | "hours" | "whatsapp" | "call" | "instagram") => {
+    if (what === "booking") {
+      // premakni na #termin in zapri
+      try {
+        const el = document.querySelector("#termin");
+        if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+        else window.location.hash = "#termin";
+      } catch {}
+      setOpen(false);
+      return;
+    }
+
+    if (what === "prices") {
+      // poskusi skrolati do sekcije cenika; če nimaš sidra, pusti le bot sporočilo
+      const sent = tryScrollToSelector('[data-section="prices"], #cenik, #preise');
+      setMessages((m) => [
+        ...m,
+        {
+          role: "bot",
+          text: sent
+            ? (FAQ.find((f) => f.id === "price")!.answer[l])
+            : (FAQ.find((f) => f.id === "price")!.answer[l]),
+        },
+      ]);
+      return;
+    }
+
+    if (what === "address") {
+      setMessages((m) => [...m, { role: "bot", text: FAQ.find((f) => f.id === "address")!.answer[l] }]);
+      if (mapsQuery) {
+        const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapsQuery)}`;
+        window.open(url, "_blank", "noopener,noreferrer");
+      }
+      return;
+    }
+
+    if (what === "hours") {
+      setMessages((m) => [...m, { role: "bot", text: FAQ.find((f) => f.id === "hours")!.answer[l] }]);
+      return;
+    }
+
+    if (what === "whatsapp") {
+      if (whatsappNumber) {
+        window.open(`https://wa.me/${whatsappNumber}`, "_blank", "noopener,noreferrer");
+      }
+      return;
+    }
+
+    if (what === "call") {
+      if (phone) {
+        window.location.href = `tel:${phone.replace(/\s+/g, "")}`;
+      }
+      return;
+    }
+
+    if (what === "instagram") {
+      window.open("https://instagram.com/", "_blank", "noopener,noreferrer");
+      return;
+    }
   };
 
   return (
     <>
-      {/* Floating button */}
+      {/* Floating Toggle Button */}
       <button
-        aria-label="Assistant"
-        onClick={() => setOpen((v) => !v)}
-        className="fixed bottom-5 right-5 z-50 inline-flex h-14 w-14 items-center justify-center rounded-full bg-rose-400 text-white shadow-lg ring-1 ring-black/10 hover:bg-rose-500 focus:outline-none focus:ring-2 focus:ring-rose-300 transition"
+        aria-label="assistant"
+        onClick={() => setOpen((o) => !o)}
+        className="fixed bottom-4 right-4 z-[1000] rounded-full bg-rose-500 text-white shadow-lg hover:bg-rose-600 focus:outline-none focus:ring-2 focus:ring-rose-300 h-14 w-14 flex items-center justify-center"
       >
-        <span className="text-xl">🧑‍💼</span>
+        {open ? <X className="h-6 w-6" /> : <MessageCircle className="h-6 w-6" />}
       </button>
 
-      {/* Panel */}
+      {/* Widget Panel */}
       {open && (
-        <div
-          ref={panelRef}
-          className="fixed bottom-20 right-5 z-50 w-[320px] max-w-[90vw] rounded-2xl bg-white/95 backdrop-blur shadow-2xl ring-1 ring-black/5"
-        >
-          <div className="flex items-center gap-3 px-4 py-3 border-b">
-            <div className="h-9 w-9 flex items-center justify-center rounded-full bg-rose-100">
-              🧑‍💼
-            </div>
-            <div className="font-semibold">{T.title}</div>
+        <div className="fixed bottom-20 right-4 z-[1000] w-[92vw] max-w-[360px] rounded-2xl border border-rose-200 bg-white shadow-xl overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3 bg-rose-50 border-b">
+            <div className="font-semibold text-rose-700">{t.title[l]}</div>
+            <button
+              className="rounded-full p-1 text-rose-600 hover:bg-rose-100"
+              onClick={() => setOpen(false)}
+              aria-label="close"
+            >
+              <X className="h-5 w-5" />
+            </button>
           </div>
 
-          <div className="p-4 space-y-4">
-            {/* book */}
-            <div className="rounded-xl border bg-rose-50/60 p-3">
-              <div className="font-medium mb-1">{T.book}</div>
-              <div className="text-sm mb-2 text-rose-900/80">{T.bookDesc}</div>
-              <button
-                onClick={() => scrollTo("termin")}
-                className="rounded-lg bg-rose-500 text-white px-3 py-1.5 text-sm hover:bg-rose-600 transition"
-              >
-                {T.goToBooking}
-              </button>
-            </div>
-
-            {/* prices */}
-            <div className="rounded-xl border p-3">
-              <div className="font-medium mb-1">{T.prices}</div>
-              <div className="text-sm mb-2 text-neutral-600">{T.pricesDesc}</div>
-              <button
-                onClick={() => scrollTo("cenik")}
-                className="rounded-lg bg-neutral-800 text-white px-3 py-1.5 text-sm hover:bg-black transition"
-              >
-                {T.goToPrices}
-              </button>
-            </div>
-
-            {/* location */}
-            <div className="rounded-xl border p-3">
-              <div className="font-medium mb-1">{T.location}</div>
-              <div className="text-sm mb-2 text-neutral-600">{T.locationDesc}</div>
-              <a
-                href={`https://maps.google.com/?q=${encodeURIComponent(mapsQuery)}`}
-                target="_blank"
-                className="inline-block rounded-lg bg-white border px-3 py-1.5 text-sm hover:bg-neutral-50 transition"
-              >
-                {T.openMaps}
-              </a>
-            </div>
-
-            {/* contact */}
-            <div className="rounded-xl border p-3">
-              <div className="font-medium mb-2">{T.contact}</div>
-              <div className="flex flex-wrap gap-2">
-                <a
-                  href={`https://wa.me/${whatsappNumber}`}
-                  target="_blank"
-                  className="inline-flex items-center gap-2 rounded-xl bg-[#25D366] text-white px-3 py-1.5 text-sm font-medium shadow-sm hover:bg-[#1ebe5a] focus:outline-none focus:ring-2 focus:ring-[#25D366]/40 transition"
+          {/* Messages */}
+          <div className="max-h-[50vh] overflow-auto px-3 py-3 space-y-2">
+            {messages.map((m, i) => (
+              <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+                <div
+                  className={`rounded-2xl px-3 py-2 text-sm ${
+                    m.role === "user" ? "bg-rose-500 text-white" : "bg-rose-100 text-rose-900"
+                  } max-w-[80%] whitespace-pre-wrap`}
                 >
-                  {/* WhatsApp icon */}
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 2C6.486 2 2 6.177 2 11.25c0 1.791.51 3.464 1.389 4.9L2 22l5.08-1.307A10.4 10.4 0 0 0 12 20.5c5.514 0 10-4.177 10-9.25S17.514 2 12 2Zm5.662 13.705c-.239.676-1.194 1.122-1.948 1.27-.519.103-1.197.184-3.476-.718-2.918-1.132-4.804-4.061-4.951-4.248-.148-.186-1.185-1.573-1.185-3.003 0-1.43.75-2.128 1.016-2.414.266-.285.584-.357.779-.357.194 0 .389.002.561.01.182.007.427-.069.669.51.239.574.814 1.985.886 2.13.072.146.12.317.023.503-.096.186-.144.303-.285.468-.142.165-.301.37-.43.498-.142.141-.29.295-.125.58.164.285.728 1.188 1.563 1.924 1.076.94 1.986 1.231 2.27 1.377.284.146.451.126.62-.075.168-.201.716-.835.907-1.121.19-.285.378-.238.629-.141.251.097 1.594.75 1.868.885.275.135.457.2.525.313.068.114.068.66-.171 1.336Z"/>
-                  </svg>
-                  {T.whatsapp}
-                </a>
-
-                <a
-                  href={`tel:${phone}`}
-                  className="inline-flex items-center gap-2 rounded-xl border border-rose-300 bg-rose-50/60 text-rose-700 px-3 py-1.5 text-sm font-medium shadow-sm hover:bg-rose-100 focus:outline-none focus:ring-2 focus:ring-rose-300/50 transition"
-                >
-                  ☎ {T.call}
-                </a>
-
-                <button
-                  onClick={copyEmail}
-                  className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#F58529] via-[#DD2A7B] to-[#8134AF] text-white px-3 py-1.5 text-sm font-medium shadow-sm hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-[#DD2A7B]/40 transition"
-                >
-                  ✉ {T.copyEmail}
-                </button>
+                  {m.text}
+                </div>
               </div>
-            </div>
+            ))}
           </div>
 
-          {notif && <div className="px-4 pb-3 text-sm text-green-700">{notif}</div>}
+          {/* Quick actions */}
+          <div className="grid grid-cols-3 gap-2 px-3 pb-2">
+            <QuickButton onClick={() => onQuick("booking")} icon={<CalendarDays className="h-4 w-4" />} label={t.quick.booking[l]} />
+            <QuickButton onClick={() => onQuick("prices")} icon={<Euro className="h-4 w-4" />} label={t.quick.prices[l]} />
+            <QuickButton onClick={() => onQuick("address")} icon={<MapPin className="h-4 w-4" />} label={t.quick.address[l]} />
+            <QuickButton onClick={() => onQuick("hours")} icon={<Clock className="h-4 w-4" />} label={t.quick.hours[l]} />
+            <QuickButton onClick={() => onQuick("whatsapp")} icon={<MessageSquare className="h-4 w-4" />} label={t.quick.whatsapp[l]} color="whatsapp" />
+            <QuickButton onClick={() => onQuick("call")} icon={<Phone className="h-4 w-4" />} label={t.quick.call[l]} />
+            <QuickButton onClick={() => onQuick("instagram")} icon={<Instagram className="h-4 w-4" />} label={t.quick.instagram[l]} color="instagram" />
+          </div>
+
+          {/* Input */}
+          <form
+            className="flex items-center gap-2 border-t px-3 py-3 bg-white"
+            onSubmit={(e) => {
+              e.preventDefault();
+              send(input);
+              setInput("");
+            }}
+          >
+            <input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder={t.inputPlaceholder[l]}
+              className="flex-1 rounded-xl border border-rose-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-rose-300"
+            />
+            <button
+              type="submit"
+              className="rounded-xl bg-rose-500 text-white px-3 py-2 text-sm hover:bg-rose-600 focus:outline-none focus:ring-2 focus:ring-rose-300"
+            >
+              <Send className="h-4 w-4" />
+            </button>
+          </form>
         </div>
       )}
     </>
+  );
+}
+
+function includesAny(base: string, tokens: string[]) {
+  return tokens.some((t) => base.includes(t));
+}
+
+function tryScrollToSelector(sel: string) {
+  const el = document.querySelector(sel);
+  if (el) {
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
+    return true;
+  }
+  return false;
+}
+
+type QuickProps = {
+  onClick: () => void;
+  icon: React.ReactNode;
+  label: string;
+  color?: "whatsapp" | "instagram" | "default";
+};
+
+function QuickButton({ onClick, icon, label, color = "default" }: QuickProps) {
+  const base =
+    "flex items-center justify-center gap-1 rounded-xl border px-2 py-2 text-xs font-medium focus:outline-none transition";
+  const styles =
+    color === "whatsapp"
+      ? "border-[#25D366]/40 bg-[#25D366]/10 text-[#128C7E] hover:bg-[#25D366]/20"
+      : color === "instagram"
+      ? "border-pink-300 bg-gradient-to-r from-pink-50 via-rose-50 to-purple-50 text-rose-700 hover:from-pink-100 hover:to-purple-100"
+      : "border-rose-200 bg-rose-50 text-rose-800 hover:bg-rose-100";
+
+  return (
+    <button onClick={onClick} className={`${base} ${styles}`} type="button">
+      {icon}
+      <span className="truncate">{label}</span>
+    </button>
   );
 }
