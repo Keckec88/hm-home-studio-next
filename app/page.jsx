@@ -2,9 +2,10 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  MessageCircle, Phone, Instagram, MapPin, Clock, Calendar,
+  MessageCircle, Phone, Instagram, MapPin, Clock,
   Lock, Unlock, Download, Upload, Mail, Scissors, Sparkles
 } from "lucide-react";
+import Assistant from "./components/Assistant";
 
 /* === PODATKI PODJETJA === */
 const BUSINESS = {
@@ -50,8 +51,6 @@ const translations = {
     minutes: "Min",
     today: "Heute",
     locationBadge: "Parken in der Nähe • Kaffee/Tee inklusive",
-    addGoogle: "Google Kalender",
-    addOutlook: ".ics herunterladen",
     emailTemplate: "E-Mail Vorlage",
     studioTitle: "Studio",
     studioText:
@@ -103,8 +102,6 @@ const translations = {
     minutes: "min",
     today: "Today",
     locationBadge: "Parking nearby • Coffee/tea included",
-    addGoogle: "Google Calendar",
-    addOutlook: "Download .ics",
     emailTemplate: "Email template",
     studioTitle: "Studio",
     studioText:
@@ -156,8 +153,6 @@ const translations = {
     minutes: "dk",
     today: "Bugün",
     locationBadge: "Yakın otopark • Kahve/çay ikramı",
-    addGoogle: "Google Takvim",
-    addOutlook: ".ics indir",
     emailTemplate: "E-posta şablonu",
     studioTitle: "Stüdyo",
     studioText:
@@ -209,8 +204,6 @@ const translations = {
     minutes: "min",
     today: "Danas",
     locationBadge: "Parking u blizini • Kafa/čaj uključeni",
-    addGoogle: "Google kalendar",
-    addOutlook: "Preuzmi .ics",
     emailTemplate: "Email šablon",
     studioTitle: "Studio",
     studioText:
@@ -262,8 +255,6 @@ const translations = {
     minutes: "min",
     today: "Danas",
     locationBadge: "Parking u blizini • Kava/čaj uključeni",
-    addGoogle: "Google kalendar",
-    addOutlook: "Preuzmi .ics",
     emailTemplate: "Predložak e-pošte",
     studioTitle: "Studio",
     studioText:
@@ -341,27 +332,9 @@ function generateSlots(date, plan, selectedDuration) {
   return out;
 }
 
-function googleCalLink(title, details, startISO, minutes) {
-  const start = new Date(startISO), end = new Date(start.getTime()+minutes*60000);
-  const fmt = (x)=>x.toISOString().replace(/[-:]/g,"").split(".")[0]+"Z";
-  const qs = new URLSearchParams({ action:"TEMPLATE", text:title, details, location:BUSINESS.address, dates:`${fmt(start)}/${fmt(end)}` });
-  return `https://calendar.google.com/calendar/render?${qs.toString()}`;
-}
-
-function buildICS(title, details, startISO, minutes){
-  const start = new Date(startISO), end = new Date(start.getTime()+minutes*60000);
-  const fmt = (x)=>x.toISOString().replace(/[-:]/g,"").split(".")[0]+"Z";
-  return [
-    "BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//HM home studio//EN","CALSCALE:GREGORIAN","METHOD:PUBLISH",
-    "BEGIN:VEVENT",`UID:${Date.now()}@hmhomestudio`,`DTSTAMP:${fmt(new Date())}`,`DTSTART:${fmt(start)}`,`DTEND:${fmt(end)}`,
-    `SUMMARY:${title}`,`DESCRIPTION:${details}`,`LOCATION:${BUSINESS.address}`,"END:VEVENT","END:VCALENDAR"
-  ].join("\r\n");
-}
-
 /* === PRIKAZ CENE: poravnava € in številk === */
 function PriceTag({ price }) {
   const s = String(price).trim();
-  // podpiramo "€40", "40 €", "3 €" ...
   const m = s.match(/^([€$])?\s*([\d.,]+)\s*([€$])?$/);
   const leading = !!m?.[1];
   const curr = m?.[1] || m?.[3] || "€";
@@ -370,7 +343,7 @@ function PriceTag({ price }) {
   return (
     <span
       className="inline-flex items-baseline gap-1 whitespace-nowrap"
-      style={{ fontFeatureSettings: '"tnum" 1' }} // tabular numbers
+      style={{ fontFeatureSettings: '"tnum" 1' }}
     >
       {leading && <span>{curr}</span>}
       <span className="tabular-nums">{num}</span>
@@ -383,8 +356,6 @@ function PriceTag({ price }) {
 export default function Page(){
   const [lang, setLang] = useState("de");
   const t = translations[lang] || translations.de;
-
-  const whatsappBase = `https://wa.me/${BUSINESS.phoneTel}`;
 
   // plan z migracijo
   const [plan, setPlan] = useState(() => {
@@ -457,24 +428,12 @@ export default function Page(){
       : [...p.blockedISO, slot.iso]
   }));
 
+  const whatsappBase = `https://wa.me/${BUSINESS.phoneTel}`;
   const sendToWhatsApp = (slot) => {
     const text = encodeURIComponent(
       `Pozdrav HM home studio!\n${t.bookingName}: ${name || "-"}\nJezik/Language: ${lang.toUpperCase()}\n${t.bookingService}: ${service}\n${t.bookingDate}: ${date} ${slot.hhmm}\n${t.bookingDuration}: ${duration} ${t.minutes}`
     );
     window.open(`${whatsappBase}?text=${text}`, "_blank");
-  };
-  const handleICS = (slot) => {
-    const title = `${BUSINESS.name}: ${service}`;
-    const details = `${BUSINESS.owner} • ${BUSINESS.phoneDisplay} • ${BUSINESS.email}`;
-    const ics = buildICS(title, details, slot.iso, duration);
-    const blob = new Blob([ics], { type: "text/calendar;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href = url; a.download = `hm-${date}-${slot.hhmm}.ics`; a.click(); URL.revokeObjectURL(url);
-  };
-  const googleLink = (slot) => {
-    const title = `${BUSINESS.name}: ${service}`;
-    const details = `${BUSINESS.owner} • ${BUSINESS.phoneDisplay} • ${BUSINESS.email}`;
-    return googleCalLink(title, details, slot.iso, duration);
   };
   const [copied, setCopied] = useState(false);
   const handleCopyEmail = (slot) => {
@@ -484,6 +443,9 @@ export default function Page(){
   };
 
   const [lightbox, setLightbox] = useState(null);
+
+  // za Assistant: če ni DE, uporabimo SL (ima besedila)
+  const assistantLocale = (lang === "de" ? "de" : "sl");
 
   return (
     <div className="min-h-screen">
@@ -517,7 +479,8 @@ export default function Page(){
               <option value="sr">🇷🇸 SR</option>
               <option value="hr">🇭🇷 HR</option>
             </select>
-            <a href={`https://wa.me/${BUSINESS.phoneTel}`} target="_blank" className="btn btn-rg">
+            {/* CTA → skok na termin */}
+            <a href="#termin" className="inline-flex items-center gap-2 rounded-xl bg-rose-500 text-white px-4 py-2 font-medium shadow-sm hover:bg-rose-600 focus:outline-none focus:ring-2 focus:ring-rose-300/50 transition">
               <MessageCircle className="size-4" /> {t.reserve}
             </a>
           </div>
@@ -531,11 +494,25 @@ export default function Page(){
             <h1 className="text-4xl font-bold mb-4">{t.heroTitle}</h1>
             <p className="text-lg mb-6">{t.heroText}</p>
             <div className="flex flex-wrap gap-3">
-              <a href={`https://wa.me/${BUSINESS.phoneTel}`} target="_blank" className="btn btn-rg">
+              {/* CTA → skok na termin */}
+              <a href="#termin" className="inline-flex items-center gap-2 rounded-xl bg-rose-500 text-white px-4 py-2 font-medium shadow-sm hover:bg-rose-600 focus:outline-none focus:ring-2 focus:ring-rose-300/50 transition">
                 <MessageCircle className="size-5" /> {t.reserve}
               </a>
-              <a href={`tel:${BUSINESS.phoneTel}`} className="btn btn-outline"><Phone className="size-5" /> {BUSINESS.phoneDisplay}</a>
-              <a href={BUSINESS.instagram} target="_blank" className="btn btn-outline"><Instagram className="size-5" /> Instagram</a>
+              {/* Telefon (rahlo poudarjen) */}
+              <a
+                href={`tel:${BUSINESS.phoneTel}`}
+                className="inline-flex items-center gap-2 rounded-xl border border-rose-300 bg-rose-50/60 text-rose-700 px-4 py-2 font-medium shadow-sm hover:bg-rose-100 focus:outline-none focus:ring-2 focus:ring-rose-300/50 transition"
+              >
+                <Phone className="size-5" /> {BUSINESS.phoneDisplay}
+              </a>
+              {/* Instagram (brand gradient) */}
+              <a
+                href={BUSINESS.instagram}
+                target="_blank"
+                className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#F58529] via-[#DD2A7B] to-[#8134AF] text-white px-4 py-2 font-medium shadow-sm hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-[#DD2A7B]/40 transition"
+              >
+                <Instagram className="size-5" /> Instagram
+              </a>
             </div>
           </div>
           <div className="rounded-2xl shadow-lg border border-black/5 bg-white/90 p-6">
@@ -569,8 +546,18 @@ export default function Page(){
             <h2 className="text-3xl font-semibold mb-4">{t.studioTitle}</h2>
             <p className="text-slate-600 leading-relaxed">{t.studioText}</p>
             <div className="mt-6 flex gap-3">
-              <a href="#booking" className="btn btn-rg">{t.reserve}</a>
-              <a href={`https://wa.me/${BUSINESS.phoneTel}`} target="_blank" className="btn btn-outline"><MessageCircle className="size-5" /> WhatsApp</a>
+              {/* CTA → skok na termin */}
+              <a href="#termin" className="inline-flex items-center gap-2 rounded-xl bg-rose-500 text-white px-4 py-2 font-medium shadow-sm hover:bg-rose-600 focus:outline-none focus:ring-2 focus:ring-rose-300/50 transition">
+                {t.reserve}
+              </a>
+              {/* WhatsApp (brand green) */}
+              <a
+                href={`https://wa.me/${BUSINESS.phoneTel}`}
+                target="_blank"
+                className="inline-flex items-center gap-2 rounded-xl bg-[#25D366] text-white px-4 py-2 font-medium shadow-sm hover:bg-[#1ebe5a] focus:outline-none focus:ring-2 focus:ring-[#25D366]/40 transition"
+              >
+                <MessageCircle className="size-5" /> WhatsApp
+              </a>
             </div>
           </div>
         </div>
@@ -590,6 +577,8 @@ export default function Page(){
 
       {/* PRICES */}
       <section id="prices" className="py-20 bg-rose-50">
+        {/* sidro za pomočnika */}
+        <div id="cenik" className="-mt-24 pt-24" />
         <div className="mx-auto max-w-6xl px-6 grid md:grid-cols-2 gap-6">
           <div className="bg-white p-6 rounded-xl shadow">
             <h3 className="text-xl font-bold mb-4">{t.nailsTitle}</h3>
@@ -619,6 +608,8 @@ export default function Page(){
 
       {/* BOOKING */}
       <section id="booking" className="py-20">
+        {/* sidro za CTA-je in pomočnika */}
+        <div id="termin" className="-mt-24 pt-24" />
         <div className="mx-auto max-w-6xl px-6">
           <h2 className="text-3xl font-semibold mb-2">{t.bookingTitle}</h2>
           <p className="text-slate-600 mb-6">{t.bookingSubtitle}</p>
@@ -649,11 +640,11 @@ export default function Page(){
               <button onClick={()=>setDate(new Date().toISOString().slice(0,10))} className="text-rose-600 text-sm underline">{t.today}</button>
 
               <div className="mt-6 p-3 border rounded-xl flex items-center gap-3 flex-wrap">
-                <button onClick={onAdminClick} className="btn btn-outline">
+                <button onClick={onAdminClick} className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm">
                   {admin ? <Unlock className="size-4" /> : <Lock className="size-4" />} {t.bookingAdmin}
                 </button>
 
-                {/* PIN vnos – pojavi se samo na željo (brez prompta) */}
+                {/* PIN vnos – prikaže se le po kliku */}
                 {!admin && showPin && (
                   <div className="flex items-center gap-2">
                     <input
@@ -666,7 +657,7 @@ export default function Page(){
                       placeholder="PIN"
                       className="border rounded-lg px-2 py-1 w-20 text-center tracking-widest"
                     />
-                    <button onClick={submitPin} className="btn btn-outline">OK</button>
+                    <button onClick={submitPin} className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm">OK</button>
                   </div>
                 )}
 
@@ -674,11 +665,11 @@ export default function Page(){
                   <>
                     <button
                       onClick={()=>{ const blob=new Blob([JSON.stringify(plan,null,2)],{type:"application/json"}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download="hm-plan.json"; a.click(); URL.revokeObjectURL(url); }}
-                      className="btn btn-outline"
+                      className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm"
                     >
                       <Download className="size-4" /> {t.exportPlan}
                     </button>
-                    <label className="btn btn-outline cursor-pointer">
+                    <label className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm cursor-pointer">
                       <Upload className="size-4" /> {t.importPlan}
                       <input
                         type="file"
@@ -700,17 +691,25 @@ export default function Page(){
                   <div key={slot.iso} className="p-2 rounded-xl border bg-white">
                     <div className="text-center font-medium">{slot.hhmm}</div>
                     <div className="mt-2 grid grid-cols-1 gap-2">
+                      {/* WhatsApp */}
                       <button
-                        disabled={slot.blocked}
+                        disabled={slot.blocked && !admin}
                         onClick={()=> (admin ? toggleBlock(slot) : sendToWhatsApp(slot))}
-                        className={`btn ${admin ? "btn-outline" : "btn-rg"} text-sm justify-center ${slot.blocked ? "!bg-slate-200 !text-slate-400 cursor-not-allowed" : ""}`}
+                        className={
+                          admin
+                            ? "inline-flex items-center justify-center gap-2 rounded-xl border px-3 py-2 text-sm"
+                            : `inline-flex items-center justify-center gap-2 rounded-xl bg-[#25D366] text-white px-3 py-2 text-sm font-medium shadow-sm hover:bg-[#1ebe5a] focus:outline-none focus:ring-2 focus:ring-[#25D366]/40 transition ${slot.blocked ? "opacity-50 cursor-not-allowed" : ""}`
+                        }
                         title={admin ? (slot.blocked ? t.bookingUnlock : t.bookingLock) : "WhatsApp"}
                       >
-                        <MessageCircle className="size-4 mr-2" /> WhatsApp
+                        <MessageCircle className="size-4" /> WhatsApp
                       </button>
-                      <a href={googleLink(slot)} target="_blank" className="btn btn-outline text-sm justify-center"><Calendar className="size-4 mr-2" /> {t.addGoogle}</a>
-                      <button onClick={()=>handleICS(slot)} className="btn btn-outline text-sm justify-center"><Calendar className="size-4 mr-2" /> {t.addOutlook}</button>
-                      <button onClick={()=>handleCopyEmail(slot)} className="btn btn-outline text-sm justify-center"><Mail className="size-4 mr-2" /> {t.emailTemplate}</button>
+
+                      {/* Kopiraj e-poštno predlogo */}
+                      <button onClick={()=>handleCopyEmail(slot)} className="inline-flex items-center justify-center gap-2 rounded-xl border px-3 py-2 text-sm">
+                        <Mail className="size-4" /> {t.emailTemplate}
+                      </button>
+
                       {copied && <div className="text-center text-xs text-green-600">Kopirano</div>}
                     </div>
                   </div>
@@ -761,8 +760,23 @@ export default function Page(){
             <h3 className="text-xl font-bold mb-4">{t.contactTitle}</h3>
             <p className="text-slate-600 mb-4">{t.contactSubtitle}</p>
             <ul className="space-y-3 text-slate-700">
-              <li><a href={`https://wa.me/${BUSINESS.phoneTel}`} target="_blank" className="flex gap-2 items-center"><MessageCircle className="size-5" /> WhatsApp</a></li>
-              <li><a href={`tel:${BUSINESS.phoneTel}`} className="flex gap-2 items-center"><Phone className="size-5" /> {BUSINESS.phoneDisplay}</a></li>
+              <li>
+                <a
+                  href={`https://wa.me/${BUSINESS.phoneTel}`}
+                  target="_blank"
+                  className="inline-flex items-center gap-2 rounded-xl bg-[#25D366] text-white px-4 py-2 font-medium shadow-sm hover:bg-[#1ebe5a] focus:outline-none focus:ring-2 focus:ring-[#25D366]/40 transition"
+                >
+                  <MessageCircle className="size-5" /> WhatsApp
+                </a>
+              </li>
+              <li>
+                <a
+                  href={`tel:${BUSINESS.phoneTel}`}
+                  className="inline-flex items-center gap-2 rounded-xl border border-rose-300 bg-rose-50/60 text-rose-700 px-4 py-2 font-medium shadow-sm hover:bg-rose-100 focus:outline-none focus:ring-2 focus:ring-rose-300/50 transition"
+                >
+                  <Phone className="size-5" /> {BUSINESS.phoneDisplay}
+                </a>
+              </li>
               <li><a href={`mailto:${BUSINESS.email}`} className="flex gap-2 items-center"><Mail className="size-5" /> {BUSINESS.email}</a></li>
               <li><a href={`https://maps.google.com/?q=${encodeURIComponent(BUSINESS.address)}`} target="_blank" className="flex gap-2 items-center"><MapPin className="size-5" /> {BUSINESS.address}</a></li>
             </ul>
@@ -780,7 +794,14 @@ export default function Page(){
           </div>
         </div>
       </footer>
+
+      {/* Avatar / pomočnik */}
+      <Assistant
+        locale={assistantLocale}
+        whatsappNumber={BUSINESS.phoneTel.replace("+","")}
+        phone={BUSINESS.phoneTel}
+        mapsQuery={BUSINESS.address}
+      />
     </div>
   );
 }
-
